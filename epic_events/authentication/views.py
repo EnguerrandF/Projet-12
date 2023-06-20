@@ -13,12 +13,6 @@ class TeamView(ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
 
-    def create(self, request):
-        serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
     def update(self, request, pk):
         team_object = self.get_object()
         validated_data = request.data.copy()

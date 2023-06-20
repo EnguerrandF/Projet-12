@@ -4,7 +4,7 @@ from app_clients_contract_event.models import ClientModel, ContractModel, Status
 
 
 class ClientModelAdmin(admin.ModelAdmin):
-    list_display = ("id", "first_name", "last_name", "email", "compagny_name")
+    list_display = ("id", "sales_contact", "first_name", "last_name", "email", "compagny_name")
 
 
 class ContractModelAdmin(admin.ModelAdmin):
@@ -16,7 +16,7 @@ class StatusModelAdmin(admin.ModelAdmin):
 
 
 class EventModelAdmin(admin.ModelAdmin):
-    list_display = ("id", "event_date", "status", "id_contract")
+    list_display = ("id", "id_contract", "support_contact", "event_date", "status")
 
 
 admin.site.register(ClientModel, ClientModelAdmin)

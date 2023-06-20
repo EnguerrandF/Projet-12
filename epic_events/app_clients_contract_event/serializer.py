@@ -8,16 +8,16 @@ class ClientSerializer(serializers.ModelSerializer):
         model = ClientModel
         fields = ['id', 'compagny_name']
 
-    def validate(self, value):
-        if len(str(value["phone"])) < 10 or len(str(value["mobile"])) < 10:
-            raise serializers.ValidationError("number is not valid")
-        return value
-
 
 class ClientSerializerDetail(serializers.ModelSerializer):
     class Meta:
         model = ClientModel
         fields = ['id', 'first_name', 'last_name', 'email', 'phone', 'mobile', 'compagny_name', 'sales_contact']
+
+    def validate(self, value):
+        if len(str(value["phone"])) == 10 or len(str(value["mobile"])) == 10:
+            raise serializers.ValidationError("number is not valid")
+        return value
 
 
 class ContractSerializer(serializers.ModelSerializer):

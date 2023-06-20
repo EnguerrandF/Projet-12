@@ -9,72 +9,51 @@ from app_clients_contract_event.serializer import ClientSerializer, ClientSerial
     ContractSerializerDetail, EventSerializer, EventSerializerDetail
 from app_clients_contract_event.models import ClientModel, ContractModel, EventModel, StatusModel
 from app_clients_contract_event.filters import ClientFilter
-from authentication.models import TeamModel
+from app_clients_contract_event.permissions import ClientPermission, ContractPermission, EventPermission
+from authentication.models import TeamModel, RoleModel
 
 
 class ClientView(ModelViewSet):
-    serializer_class = ClientSerializer
-    detail_serializer = ClientSerializerDetail
-    permission_classes = [IsAuthenticated]
+    serializer_class = ClientSerializerDetail
+    limit_serializer = ClientSerializer
+    permission_classes = [IsAuthenticated, ClientPermission]
     queryset = ClientModel
     pagination_class = PageNumberPagination
-    # filterset_class = ClientFilter
-
-    def create(self, request,):
-        serializer = self.detail_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
 
     def list(self, request):
-        email = request.query_params.get('email')
-        compagny_name = request.query_params.get('compagny_name')
-
-        if email:
-            queryset = self.queryset.objects.filter(email=email)
-        elif compagny_name:
-            queryset = self.queryset.objects.filter(compagny_name=compagny_name)
+        if request.user.role.role in ['commercial']:
+            queryset_data = self.queryset.objects.filter(sales_contact=request.user)
+        elif request.user.role.role in ['gestion']:
+            queryset_data = self.queryset.objects.all()
+        elif request.user.role.role in ['support']:
+            queryset_data = self.queryset.objects.filter(
+                contractmodel__eventmodel__support_contact=request.user).distinct()
         else:
-            queryset = self.queryset.objects.all()
+            queryset_data = []
 
-        serializer = self.serializer_class(queryset, many=True)
+        serializer = self.limit_serializer(queryset_data, many=True)
         return Response(serializer.data)
-
-    def retrieve(self, request, pk):
-        queryset = self.queryset
-        user = get_object_or_404(queryset, pk=pk)
-        serializer = self.detail_serializer(user)
-        return Response(serializer.data)
-
-    def update(self, request, pk):
-        client_object = self.get_object()
-        validated_data = request.data.copy()
-
-        client_object.first_name = validated_data.get('first_name', client_object.first_name)
-        client_object.last_name = validated_data.get('last_name', client_object.last_name)
-        client_object.email = validated_data.get('email', client_object.email)
-        client_object.phone = validated_data.get('phone', client_object.phone)
-        client_object.mobile = validated_data.get('mobile', client_object.mobile)
-        client_object.compagny_name = validated_data.get('compagny_name', client_object.compagny_name)
-
-        if not TeamModel.objects.filter(id=int(validated_data["sales_contact"])):
-            raise serializers.ValidationError("id is not valid")
-
-        sales_contact_instance = TeamModel.objects.get(id=int(validated_data["sales_contact"]))
-        client_object.sales_contact = sales_contact_instance
-
-        client_object.save()
-        serialiser = self.detail_serializer(client_object)
-        return Response(serialiser.data)
 
 
 class ContractView(ModelViewSet):
-    serializer_class = ContractSerializer
-    detail_serializer = ContractSerializerDetail
-    permission_classes = [IsAuthenticated]
+    serializer_class = ContractSerializerDetail
+    limit_serializer = ContractSerializer
+    permission_classes = [IsAuthenticated, ContractPermission]
     queryset = ContractModel
     pagination_class = PageNumberPagination
-    # filterset_class = 
+
+    def dispatch(self, request, *args, **kwargs):
+        """ Check the rights of the connected user on the Customer with permission from ClientView """
+        parent_view = ClientView.as_view({"get": "retrieve"})
+        original_method = request.method
+        request.method = "GET"
+        parent_kwargs = {"pk": kwargs["client_pk"]}
+        parent_response = parent_view(request, *args, **parent_kwargs)
+        if parent_response.exception:
+            return parent_response
+
+        request.method = original_method
+        return super().dispatch(request, *args, **kwargs)
 
     def create(self, request, client_pk):
         data = request.data.copy()
@@ -85,46 +64,36 @@ class ContractView(ModelViewSet):
         return Response(serializer.data)
 
     def list(self, request, client_pk):
-        payment_due = request.query_params.get('payment_due')
-        amount = request.query_params.get('amount')
-
-        if payment_due:
-            queryset = self.queryset.objects.filter(payment_due=payment_due)
-        elif amount:
-            queryset = self.queryset.objects.filter(amount=amount)
-        else:
+        if request.user.role.role in ['gestion', 'commercial']:
             queryset = self.queryset.objects.filter(id_client=client_pk)
+        elif request.user.role.role == 'support':
+            queryset = self.queryset.objects.filter(eventmodel__support_contact=request.user)
 
-        serializer = self.serializer_class(queryset, many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, pk, client_pk):
-        queryset = self.queryset
-        user = get_object_or_404(queryset, pk=pk)
-        serializer = self.detail_serializer(user)
+        serializer = self.limit_serializer(queryset, many=True)
         return Response(serializer.data)
 
     def update(self, request, pk, client_pk):
-        contract_object = self.get_object()
-        validated_data = request.data.copy()
+        instance = self.get_object()
+        data = request.data.copy()
+        data['id_client'] = int(client_pk)
 
-        contract_object.payment_due = validated_data.get('payment_due', contract_object.payment_due)
-        contract_object.amount = validated_data.get('amount', contract_object.amount)
+        serializer = self.serializer_class(instance, data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
 
-        contract_object.save()
-        serialiser = self.detail_serializer(contract_object)
-        return Response(serialiser.data)
+        return Response(serializer.data)
 
 
 class EventView(ModelViewSet):
     serializer_class = EventSerializer
     detail_serializer = EventSerializerDetail
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, EventPermission]
     queryset = EventModel
     pagination_class = PageNumberPagination
     # filterset_class =
 
     def create(self, request, client_pk, contract_pk):
+        self.check_object_permissions(self.request, self.queryset)
         data = request.data.copy()
         data['id_contract'] = int(contract_pk)
         serializer = self.detail_serializer(data=data)
@@ -133,6 +102,7 @@ class EventView(ModelViewSet):
         return Response(serializer.data)
 
     def list(self, request, client_pk, contract_pk):
+        self.check_object_permissions(self.request, self.queryset)
         event_date = request.query_params.get('event_date')
 
         if event_date:
@@ -144,12 +114,14 @@ class EventView(ModelViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, client_pk, contract_pk, pk):
+        self.check_object_permissions(self.request, self.queryset)
         queryset = self.queryset
         user = get_object_or_404(queryset, pk=pk)
         serializer = self.detail_serializer(user)
         return Response(serializer.data)
 
     def update(self, request, client_pk, contract_pk, pk):
+        self.check_object_permissions(self.request, self.queryset)
         event_object = self.get_object()
         validated_data = request.data.copy()
 
@@ -163,7 +135,7 @@ class EventView(ModelViewSet):
 
         status_instance = StatusModel.objects.get(id=int(validated_data["status"]))
         support_contact_instance = TeamModel.objects.get(id=int(validated_data["support_contact"]))
-        print(event_object, "oOOOOOOOOOOOOOOOOOOO")
+
         event_object.status = status_instance
         event_object.support_contact = support_contact_instance
         event_object.save()
