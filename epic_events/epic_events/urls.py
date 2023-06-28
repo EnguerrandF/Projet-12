@@ -17,31 +17,23 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
-
 from rest_framework.routers import SimpleRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_nested import routers
 
 from authentication.views import TeamView
 from app_clients_contract_event.views import ClientView, ContractView, EventView
 
 
-router = routers.SimpleRouter()
+router = SimpleRouter()
 
 router.register('team', TeamView, basename='team')
 router.register('client', ClientView, basename='client')
-
-contract_router = routers.NestedDefaultRouter(router, 'client', lookup='client')
-contract_router.register('contract', ContractView, basename='contract')
-
-event_router = routers.NestedDefaultRouter(contract_router, 'contract', lookup='contract')
-event_router.register('event', EventView, basename='event')
+router.register('contract', ContractView, basename='contract')
+router.register('event', EventView, basename='event')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/login/', TokenObtainPairView.as_view(), name='obtain_tokens'),    
     path('api/token/refresh/', TokenRefreshView.as_view(), name='refresh_token'),
     path('api/', include(router.urls)),
-    path('api/', include(contract_router.urls)),
-    path('api/', include(event_router.urls)),
 ]

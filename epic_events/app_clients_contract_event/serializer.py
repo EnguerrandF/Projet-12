@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.core.validators import EmailValidator
 
 from app_clients_contract_event.models import ClientModel, ContractModel, EventModel
 
@@ -15,7 +16,7 @@ class ClientSerializerDetail(serializers.ModelSerializer):
         fields = ['id', 'first_name', 'last_name', 'email', 'phone', 'mobile', 'compagny_name', 'sales_contact']
 
     def validate(self, value):
-        if len(str(value["phone"])) == 10 or len(str(value["mobile"])) == 10:
+        if len(str(value["phone"])) != 10 or len(str(value["mobile"])) != 10:
             raise serializers.ValidationError("number is not valid")
         return value
 

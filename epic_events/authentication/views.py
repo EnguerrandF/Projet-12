@@ -1,32 +1,26 @@
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import serializers
 from rest_framework.pagination import PageNumberPagination
 
 from authentication.serializer import TeamSerializer
-from authentication.models import RoleModel
+from authentication.models import TeamModel
+from authentication.permissions import TeamPermission
 
 
 class TeamView(ModelViewSet):
     serializer_class = TeamSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, TeamPermission]
     pagination_class = PageNumberPagination
+    queryset = TeamModel.objects.all()
 
     def update(self, request, pk):
-        team_object = self.get_object()
-        validated_data = request.data.copy()
+        instance = self.get_object()
+        data = request.data.copy()
+        instance.set_password(data['password'])
+        data['password'] = instance.password
+        serializer = self.get_serializer(instance, data=data, )
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
 
-        team_object.password = validated_data.get('password', team_object.password)
-        team_object.username = validated_data.get('username', team_object.username)
-        team_object.first_name = validated_data.get('first_name', team_object.first_name)
-        team_object.last_name = validated_data.get('last_name', team_object.last_name)
-        if not RoleModel.objects.filter(id=int(validated_data["role"])):
-            raise serializers.ValidationError("role is not valid")
-
-        role_instance = RoleModel.objects.get(id=int(validated_data["role"]))
-        team_object.role = role_instance
-
-        team_object.save()
-        serialiser = self.serializer_class(team_object)
-        return Response(serialiser.data)
+        return Response(serializer.data)
